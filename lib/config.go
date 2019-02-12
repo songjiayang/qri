@@ -5,62 +5,8 @@ import (
 	"fmt"
 
 	"github.com/ghodss/yaml"
-	golog "github.com/ipfs/go-log"
-	"github.com/qri-io/ioes"
 	"github.com/qri-io/qri/config"
-	"github.com/qri-io/qri/config/migrate"
 )
-
-var (
-	// Config is the global configuration object
-	Config *config.Config
-	// ConfigFilepath is the default location for a config file
-	ConfigFilepath string
-)
-
-// SaveConfig is a function that updates the configuration file
-var SaveConfig = func() error {
-	if err := Config.WriteToFile(ConfigFilepath); err != nil {
-		return fmt.Errorf("error saving profile: %s", err)
-	}
-	return nil
-}
-
-// LoadConfig loads the global default configuration
-func LoadConfig(streams ioes.IOStreams, path string) (err error) {
-	var cfg *config.Config
-	cfg, err = config.ReadFromFile(path)
-
-	if err == nil && cfg.Profile == nil {
-		err = fmt.Errorf("missing profile")
-		return
-	}
-
-	if err != nil {
-		err = fmt.Errorf(`couldn't read config file. error: %s, path: %s`, err.Error(), path)
-		return
-	}
-
-	// configure logging straight away
-	if cfg != nil && cfg.Logging != nil {
-		for name, level := range cfg.Logging.Levels {
-			golog.SetLogLevel(name, level)
-		}
-	}
-
-	Config = cfg
-
-	migrated, err := migrate.RunMigrations(streams, cfg)
-	if err != nil {
-		return err
-	}
-
-	if migrated {
-		return SaveConfig()
-	}
-
-	return nil
-}
 
 // GetConfigParams are the params needed to format/specify the fields in bytes returned from the GetConfig function
 type GetConfigParams struct {
@@ -70,9 +16,15 @@ type GetConfigParams struct {
 	Field          string
 }
 
-// GetConfig returns the Config, or one of the specified fields of the Config, as a slice of bytes
+// Config provides read & write methods for configuration details
+type Config struct {
+	cfg      *config.Config
+	filePath string
+}
+
+// Get returns the Config, or one of the specified fields of the Config, as a slice of bytes
 // the bytes can be formatted as json, concise json, or yaml
-func GetConfig(p *GetConfigParams, res *[]byte) error {
+func (c *Config) Get(p *GetConfigParams, res *[]byte) error {
 	var (
 		err    error
 		cfg    = &config.Config{}
@@ -80,9 +32,9 @@ func GetConfig(p *GetConfigParams, res *[]byte) error {
 	)
 
 	if !p.WithPrivateKey {
-		cfg = Config.WithoutPrivateValues()
+		cfg = c.cfg.WithoutPrivateValues()
 	} else {
-		cfg = Config.Copy()
+		cfg = c.cfg.Copy()
 	}
 
 	encode = cfg
@@ -111,16 +63,17 @@ func GetConfig(p *GetConfigParams, res *[]byte) error {
 	return nil
 }
 
-// SetConfig validates and saves the config (passed in as `res`)
-func SetConfig(res *config.Config) error {
-	if err := res.Validate(); err != nil {
+// Set validates, updates and saves the config
+func (c *Config) Set(update *config.Config) error {
+	if err := update.Validate(); err != nil {
 		return fmt.Errorf("error validating config: %s", err)
 	}
-	if err := SaveConfig(); err != nil {
-		return fmt.Errorf("error saving config: %s", err)
-	}
 
-	Config = res.WithPrivateValues(Config)
+	cfg := update.WithPrivateValues(c.cfg)
+	if err := cfg.WriteToFile(c.filePath); err != nil {
+		return err
+	}
+	c.cfg = cfg
 
 	return nil
 }
