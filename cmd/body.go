@@ -61,11 +61,11 @@ type BodyOptions struct {
 
 // Complete adds any missing configuration that can only be added just before calling Run
 func (o *BodyOptions) Complete(f Factory, args []string) (err error) {
-	if len(args) > 0 {
-		o.Ref = args[0]
-	}
-	o.UsingRPC = f.RPC() != nil
-	o.DatasetRequests, err = f.DatasetRequests()
+	// if len(args) > 0 {
+	// 	o.Ref = args[0]
+	// }
+	// o.UsingRPC = f.RPC() != nil
+	// o.DatasetRequests, err = f.DatasetRequests()
 	return err
 }
 
