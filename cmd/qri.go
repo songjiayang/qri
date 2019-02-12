@@ -8,12 +8,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	ipfs "github.com/qri-io/qfs/cafs/ipfs"
 	"github.com/qri-io/ioes"
-	"github.com/qri-io/qfs"
-	"github.com/qri-io/qfs/httpfs"
-	"github.com/qri-io/qfs/localfs"
-	"github.com/qri-io/qfs/muxfs"
+	ipfs "github.com/qri-io/qfs/cafs/ipfs"
 	"github.com/qri-io/qri/config"
 	"github.com/qri-io/qri/lib"
 	"github.com/qri-io/qri/p2p"
@@ -32,9 +28,7 @@ func NewQriCommand(pf PathFactory, generator gen.CryptoGenerator, ioStreams ioes
 		Short: "qri GDVCS CLI",
 		Long: `
 qri ("query") is a global dataset version control system 
-on the distributed web.
-
-https://qri.io
+on the distributed web. more at: https://qri.io
 
 Feedback, questions, bug reports, and contributions are welcome!
 https://github.com/qri-io/qri/issues`,
@@ -122,6 +116,18 @@ func (o *QriOptions) Init() (err error) {
 	initBody := func() {
 		cfgPath := filepath.Join(o.qriRepoPath, "config.yaml")
 
+		// for now this just checks for an existing config file
+		if _, e := os.Stat(cfgPath); os.IsNotExist(e) {
+			err = fmt.Errorf("no qri repo found, please run `qri setup`")
+			return
+		}
+
+		options := []lib.Option{}
+
+		qri := lib.New()
+
+		setNoColor(!o.config.CLI.ColorizeOutput || o.NoColor)
+
 		// TODO - need to remove global config state in lib, then remove this
 		lib.ConfigFilepath = cfgPath
 
@@ -129,8 +135,6 @@ func (o *QriOptions) Init() (err error) {
 			return
 		}
 		o.config = lib.Config
-
-		setNoColor(!o.config.CLI.ColorizeOutput || o.NoColor)
 
 		if o.config.RPC.Enabled {
 			addr := fmt.Sprintf(":%d", o.config.RPC.Port)
@@ -174,13 +178,6 @@ func (o *QriOptions) Init() (err error) {
 				Location: o.config.Registry.Location,
 			})
 		}
-
-		fsys := muxfs.NewMux(map[string]qfs.PathResolver{
-			"local": localfs.NewFS(),
-			"http":  httpfs.NewFS(),
-			"cafs":  store,
-			"ipfs":  store,
-		})
 
 		o.repo, err = fsrepo.NewRepo(store, fsys, pro, rc, o.qriRepoPath)
 		if err != nil {
